@@ -145,6 +145,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Validate-Bundle.ps
 | 路径 | 说明 |
 |------|------|
 | `tools/tiaportal-mcp/skill/SKILL.md` | **主规范**：工具分层、参数陷阱、Unified HMI schema、LAD/SCL 边界 |
+| `tools/tiaportal-mcp/skill/technology-objects/SKILL.md` | **工艺对象（TO）**：V20/V21 创建/改参/XML 导入导出/连驱动 |
 | `manifest/tools-list.json` | 静态工具名与层级；**运行时权威列表**以连上服务器后的 `tools/list` 为准 |
 | `docs/tool-capability-matrix.md` | 能力矩阵（静态索引） |
 | `docs/full-project-generation-runbook.md` | 完整项目生成步骤 |

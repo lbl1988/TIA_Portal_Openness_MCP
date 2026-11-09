@@ -1,5 +1,21 @@
 # Change Log
 
+## [2.3.1] - 2026-11-09 - 新增工艺对象（TO）子技能：V20/V21 创建与编辑
+
+- **新子技能 `tools/tiaportal-mcp/skill/technology-objects/`**：补齐本 MCP 的 TO 工作流。
+  现有 5 个 TO 工具只覆盖列出/导出/导入，本技能给出可执行的两条路线：
+  - **路线 A（MCP 模板法）**：导出同类型 TO → 克隆改名/改编号/改参数 → 导入 → 回读 → 编译。
+  - **路线 B（原生 Openness）**：`TechnologicalObjects.Create` + `Parameters.Find` +
+    `AxisHardwareConnectionProvider`，用于从零创建、批量改参、连驱动。
+- **`scripts/Edit-ToXml.ps1`**：PS 5.1 脚本，`List/Get/Set/Rename/Clone/Validate` 六种动作，
+  UTF-8 BOM 输出；已用真实 V19 导出 TO XML 实测克隆/改参/改名/校验通过。
+- **参考文档**：`references/mcp-tools.md`（5 个工具精确入参/返回/Override 行为）、
+  `to-xml-format.md`（真实 TO XML 逐段说明与安全编辑边界）、
+  `openness-api.md`（C# 创建/改参/连驱动/版本探测）、`to-types.md`（常用类型与参数）。
+- 关键事实固化：V21 `TO_PositioningAxis` = `10.0`；TO 不能进 SW-Unit；导入后必须
+  `GetTechnologyObjects` 回读 + `CompileSoftware` 0 错；禁止手改 `Interface`/`OfSystemLibElement`/`VREF`。
+- 主 `SKILL.md` 增加 §20 入口，README 文档地图同步。
+
 ## [2.3.0] - 2026-07-04 - 新工具 DescribeBlockLogic：把梯形图读成可读逻辑（含"恒断/禁用行"自动标注）
 
 回应"分析慢/准确率低/只敢用 SCL 躲梯形图"的痛点——加一个让模型/人像读 SCL 一样读 LAD 的工具：

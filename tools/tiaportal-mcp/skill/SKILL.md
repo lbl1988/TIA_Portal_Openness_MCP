@@ -1136,3 +1136,17 @@ automation) and risky on a live machine. Do **not** pitch them as "coming". Rati
 If a step takes longer than 90 seconds with no output, stop. The most likely
 cause is an Openness authorization dialog the user did not click. Report it,
 do not loop.
+
+## 20. 工艺对象（Technology Objects, TO）
+
+TO 的创建与编辑由子技能负责：[technology-objects/SKILL.md](technology-objects/SKILL.md)。
+
+- 本 MCP 只有 5 个 TO 工具（`GetTechnologyObjects` / `ExportTechnologyObject` /
+  `ExportTechnologyObjectsToDirectory` / `ImportTechnologyObject` /
+  `ImportTechnologyObjectsFromDirectory`）；**没有** Create/参数读写/删除/连驱动工具。
+- 新建 = 导出同类型模板 → 改名/编号/改参数 → 导入 → 回读 → 编译。
+  参数编辑用 `technology-objects/scripts/Edit-ToXml.ps1`（List/Get/Set/Rename/Clone/Validate）。
+- 从零创建、批量改参、连驱动，走原生 Openness：
+  `TechnologicalObjects.Create` / `Parameters.Find` / `AxisHardwareConnectionProvider`。
+- 硬规则：TO 只能放 PLC 根，不能进 SW-Unit；导入后必须 `GetTechnologyObjects` 回读 +
+  `CompileSoftware` 0 错；不要手改 XML 的 `Interface`、`OfSystemLibElement`、`VREF`。
