@@ -1,6 +1,6 @@
 ---
 name: tiaportal-mcp
-description: Drive Siemens TIA Portal (博途) end-to-end through the TiaMcpServer MCP plugin. Use whenever the user mentions TIA Portal, 博途, STEP 7, WinCC, S7-1200/1500, PLC, HMI, SCL, LAD, STL, Openness, technology objects (工艺对象/TO/motion axis), or asks to create/modify/compile/download a project. Always start by calling the `Bootstrap` tool — it returns environment status and the recommended next tool.
+description: Drive Siemens TIA Portal (博途) end-to-end through the TiaMcpServer MCP plugin. Use whenever the user mentions TIA Portal, 博途, STEP 7, WinCC, S7-1200/1500, PLC, HMI, SCL, LAD, STL, Openness, technology objects (工艺对象/TO/motion axis), or asks to create/modify/compile/download a project. For TIA-related tasks start with the `Bootstrap` tool — it returns environment status and the recommended next tool. Do not call any tool from this server for requests unrelated to TIA Portal.
 ---
 
 # TIA Portal MCP — Single Skill
@@ -10,11 +10,11 @@ companion plugin lives at `tools/tiaportal-mcp/`. It exposes on the order of
 **~201** MCP tools (lite profile ~43; exact runtime set: call `tools/list` on the running server) covering
 project, hardware, PLC, HMI, and online operations.
 
-## 0. Always start here
+## 0. Always start here (TIA-related tasks only — never connect proactively for unrelated requests)
 
 ```
-1. Call Bootstrap                        ← returns env, project state, next step
-2. Follow RecommendedNextTool            ← e.g. Connect, AttachToOpenProject
+1. Call Bootstrap                        ← returns env, project state, next step (read-only, does NOT connect)
+2. Follow RecommendedNextTool            ← e.g. AttachToOpenProject, GetProjectTree; Connect only when no TIA is running
 3. Call GetProjectTree                   ← resolve real paths (PLC_1, HMI_RT_1)
 4. Read-before-write loop                ← inspect, smallest change, compile, save
 ```
@@ -34,8 +34,8 @@ else unless one of these tools' output explicitly tells you to call another:
 
 | 想做的事 | 用这个，别的别碰 |
 |---|---|
-| 开局/看环境 | `Bootstrap` → 然后照它返回的 `recommendedNextTool` 做 |
-| 连接 TIA | `Connect`（新工程）或 `AttachToOpenProject`（已打开的工程） |
+| 开局/看环境 | `Bootstrap` → 然后照它返回的 `recommendedNextTool` 做（与 TIA 无关的请求不要调任何工具） |
+| 连接 TIA | TIA 已开着时多数工具会自动 attach；仅当没有任何 TIA 在跑才显式 `Connect`；已打开的工程用 `AttachToOpenProject` |
 | 看工程里有什么 | `GetProjectTree`（拿真实 `softwarePath`，如 `PLC_1`），细看用 `GetSoftwareTree` / `GetBlocks` |
 | **做一个完整项目** | `ScaffoldProject`（一次调用搞定 PLC+HMI，见 §0.5） |
 | 加一段 PLC 逻辑/变量/DB/UDT | `PlcBuildAndImport`（先 `dryRun=true`，见 §6.2/§10） |
@@ -44,8 +44,8 @@ else unless one of these tools' output explicitly tells you to call another:
 | 存盘/收尾 | `SaveProject` → `Disconnect` |
 | 环境报错/装不上 | **`Doctor`** — 一次性体检(TIA装没装/Openness组/连接状态)，每项给出修复办法；`fix=true`(默认)会自动把你加进 Openness 组(可能弹 UAC) |
 
-**铁律(弱模型尤其要守):** ① 永远先 `Bootstrap`(或装不上时先 `Doctor`)，照
-`recommendedNextTool` 走。② 路径只从 `GetProjectTree` 拿，绝不自己编。③ 写操作前先
+**铁律(弱模型尤其要守):** ① 任务涉及 TIA 时先 `Bootstrap`(装不上时先 `Doctor`)，照
+`recommendedNextTool` 走；与 TIA 无关的请求**不要调用本服务器任何工具、不要重连**。② 路径只从 `GetProjectTree` 拿，绝不自己编。③ 写操作前先
 `dryRun=true`。④ 收尾必须 `CompileAndDiagnosePlc`(0 错) + `SaveProject`。⑤ 拿不准
 参数名时，照本表/§8 的"精确参数名"抄，不要猜。HMI 美化看 §12，库复用看 §15。
 
@@ -93,7 +93,7 @@ Notes:
 - `designJson` is the §6.3 Unified HMI schema. Size the screen to the panel's native resolution (WinCC Unified PC default 800×480) or it will be clipped.
 - HMI tags: use an absolute PLC address (`%DB100.DBX0.0`, `%MD10`) so the binding read-back verifies.
 - Critical-step failures (connect/createProject/PLC device) abort and throw; per-element failures are collected in the returned `steps` so you can see exactly what to fix and re-run.
-- For per-session fast connects, keep a warm headless instance running (`_prewarm_tia.py`); see §0.
+- For per-session fast connects, keep a warm headless instance running (`_prewarm_tia.py`); see §0. ⚠️ While prewarm holds the single-attach mutex, other MCP instances' `Connect` is refused — do not run it while an AI connector is in use (a TIA you keep open gives the same ~1s attach without the conflict).
 
 Only fall back to the manual runbook (`docs/full-project-generation-runbook.md`) when the user needs something `ScaffoldProject` does not cover.
 
@@ -106,6 +106,12 @@ The `Description` of every tool starts with one of three layer tags:
 | `[L0]` | Bootstrap / read-only diagnostics | First call of a session, environment checks |
 | `[L1]` | Common workflow tool | 80% of normal sessions only need L0+L1 |
 | `[L2]` | Domain / advanced tool | Reach for these by name only after L0/L1 fails or when a specific need arises |
+
+Not sure which tool exists, or the one you half-remember is not in the list? **`FindTools(query, limit=12)`** searches the
+whole roster by capability words and returns each match's exact name, parameter signature and a risk flag:
+`read-only` / `reads the project, writes a file` / `writes or overwrites engineering data` /
+`RISK changes CPU, deletes data or closes project - call by name`. It changes nothing about which tools are
+advertised, so it is a fallback, not a step.
 
 Core L0/L1 set:
 
@@ -188,6 +194,38 @@ SaveProject                          persist to disk
 tag table, GlobalDB, FC, FB) — it generates Openness XML and imports in one
 call. Use the lower-level `ImportBlock`/`ImportType`/`ImportPlcTagTable` only
 when you already have hand-crafted XML.
+
+只读任务（读懂/审计/梳理别人的工程、出分析报告）走 **§3.1**，不写盘、不编译。
+
+## 3.1 Read-only program-audit workflow (读懂/审计别人已有的工程 — 10 步)
+
+任务是"分析/读懂/审计现有工程"而不是造程序时，**全程只读**。按这个顺序走，结论
+才稳、Token 才省；跳步就是错结论的来源。
+
+| # | 动作 | 工具 | 通过标准 / 易错点 |
+|---|---|---|---|
+| 1 | 连接并确认工程身份 | `Bootstrap` →（TIA 已开）`AttachToOpenProject`；无 TIA 才 `Connect` → `GetState` | 核对返回的工程名与完整路径是否就是用户要的那份。不符就停在这一层，**不要**沿用上一轮连接状态、同名工程或历史查询结果 |
+| 2 | 定位目标 PLC | `GetProjectTree` | 取到设备站→设备项→软件对象的真实 `softwarePath`。目录排列**不是**执行顺序 |
+| 3 | 读 PLC 软件目录 | `GetSoftwareTree` | 建立清单：有哪些 OB/FB/FC/DB、哪些 UDT、怎么分组、本次要导出什么 |
+| 4 | 核对块层级与属性 | `GetBlocksWithHierarchy`（单块用 `GetBlockInfo`） | 名称/类型/编号/语言/分组 + 一致性标志。分清三件事：块属性 ≠ 编译结果 ≠ 逻辑是否符合工艺 |
+| 5 | 一致性异常分支 | `CompileAndDiagnosePlc`（或用户在 TIA UI 编译）→ `GetBlockInfo` 复查 | 先暂停该对象导出；分别记录：编译实际返回什么、复查时一致性属性有无变化、现在可否继续导出。**不要**把"每次先全部重建"设成固定动作 |
+| 6 | 核对 UDT 与类型依赖 | `GetTypes` | 类型名/属性/一致性。接口用了自定义结构时，只看调用框和变量名不足以知道成员 |
+| 7-8 | 导出块与 UDT 并验磁盘 | `ExportBlocks` / `ExportTypes` → 本次任务的新目录（scratch，勿落工程目录） | 导出成功 ≠ 文件正确：逐个核对是否与清单对应、是否为空、XML 能否解析、名称/类型/版本是否对、有无缺失/重复/多余。批量导出会**静默跳过**不一致对象 |
+| 9 | XML → 可回查的程序记录 | 离线脚本（Python 标准库解析；不连 TIA、不改原 XML） | 只提取原文事实：元件/端口/连线、取反作用于哪个对象、数组下标、不同实例下的同名成员要分开。SCL 保留源码，未覆盖的表达式/控制结构**明确列出**，不猜 |
+| 10 | 建立全局总览 | 汇总 1-9 | 只回答工程师关心的问题：有哪些机构 / 一个周期干什么 / 入口在哪 / 模式·流程·请求·输出·反馈各由谁处理 / 数据如何在模块间交接 / 哪些有依据、哪些还缺资料 |
+
+**这套流程的边界（必须写进结论，别省）**
+
+- 静态事实 ≠ 运行值：能追静态连线与潜在读写，不计算 PLC 当前值；要看当前值走
+  `ReadPlcLiveValuesOpcUa` / `SamplePlcLiveValuesS7`，那是另一层。
+- 只分析本次导出的文件，缺的声明和被调用对象不自动补造；超出规则的结构保留原文 +
+  源位置并报告不足，**不为凑完整而猜**。
+- 工具 success / 退出码只是执行提示，不是验收结论（"结构已提取、数据流部分覆盖"
+  可以同时成立）。
+- 每条结论都要能指回：哪个块、哪个网络、哪段声明（源定位对账）。
+- 第 1-9 步不写盘、不编译；需要编译/重建/改名时先问用户。
+- 文章样本基于 **V19**，本服务器是 **V21**：指令版本、接口、实例是否落在已支持
+  范围，一律按实际导出核对，同名指令不等于同版本。
 
 ## 4. What this MCP cannot do (V21 PublicAPI limits)
 
@@ -966,6 +1004,27 @@ handler, then runs SyntaxCheck.
 
 End-to-end recipe (Connect → tags → screen → design → button actions → Save)
 matches **§12** in this file; exercise it on your own Unified RT project.
+
+## 12.1 Unified 仿真通讯排障（HMI 数据全 0 / 点动无反应）
+
+详见 `references/wincc-unified-simulation.md`。三句话版：
+
+1. **决定性判据是 ARP，不是端口**：`ping -S <虚拟网卡IP> <PLC_IP>` + `arp -a`。
+   出现 `Reply from <本机源地址>: Destination host unreachable` 且该 IP 的 MAC 为
+   `00-00-00-00-00-00`（或整段扫描全无应答）→ vPLC 没挂到虚拟网卡上，
+   **与 TCP 102、防火墙、许可证、路由都无关**。不带 `-S` 时可能走默认路由，
+   看到网关回的 `TTL expired in transit` 是假象。
+2. **官方硬性前提**：控制面板 → 设置 PG/PC 接口 → `S7ONLINE` 必须绑
+   `Siemens PLCSIM Virtual Ethernet Adapter TCPIP.1`，不能留 `Auto`；重启会自动跳回默认，
+   这是"隔天连不上"的主因。该设置只影响 S7 应用层，**不能**用它解释 ARP 失败。
+3. **HMI 工程侧只认编译结果**：`CompileAndDiagnoseHmi`(errorCount=0) +
+   `GetObjectProperty(HmiScreenItem,…,"Dynamizations")`(应有 `TagDynamization`) +
+   `ListObjectChildren(…,"EventHandlers")`(按钮应有 3 个)。
+   Unified 的 `ExportHmiScreen/ExportHmiConnection/ExportHmiTagTable` 一律
+   `ExportFailed`，`ScriptCode` 原文读不出来，别反复尝试。
+
+经典 PLCSIM 必须先由 TIA UI 的「启动仿真」拉起，MCP 侧无法启动；
+`DownloadToPlc` 只能下载到**已在运行**的目标。
 
 ## 13. Real download — V21 cast bug (FIXED 2026-06-17, verified on a real CPU)
 
